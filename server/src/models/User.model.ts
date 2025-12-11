@@ -1,6 +1,7 @@
 import { Schema, Document, model } from "mongoose";
 import validator from "validator";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 type UserRoles =
   | "admin"
@@ -10,7 +11,7 @@ type UserRoles =
   | "accountant";
 
 interface IUser extends Document {
-  firsName: string;
+  firstName: string;
   lastName: string;
   email: string;
   password: string;
@@ -18,13 +19,19 @@ interface IUser extends Document {
   refreshToken: string;
   role: UserRoles;
   isActive: boolean;
+  passwordUpdatedAt: Date;
+  comparePassword(password: string): Promise<boolean>;
+  passwordHasBeenUpdated(JWTIat: number): boolean;
+  resetPasswordToken: string;
+  createResetPasswordToken(): string;
+  resetTokenExpireAt: Date;
   createdAt: Date;
   updatedAt: Date;
 }
 
 const UserSchema = new Schema<IUser>(
   {
-    firsName: {
+    firstName: {
       type: String,
       trim: true,
       required: [true, "Please provide your firstName"],
@@ -53,11 +60,14 @@ const UserSchema = new Schema<IUser>(
       enum: ["admin", "supervisor", "logistician", "client", "accountant"],
       default: "client"
     },
+    passwordUpdatedAt: Date,
     isActive: {
       type: Boolean,
       default: true
     },
-    refreshToken: String
+    refreshToken: String,
+    resetTokenExpireAt: Date,
+    resetPasswordToken: String
   },
   { timestamps: true }
 );
@@ -71,6 +81,30 @@ UserSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+UserSchema.methods.passwordHasBeenUpdated = function (
+  JWT_TimeStamp: number
+): boolean {
+  if (!this.passwordUpdatedAt) return false;
+
+  const passwordTimeStamp = this.passwordUpdatedAt.getTime() / 1000;
+
+  return JWT_TimeStamp < passwordTimeStamp;
+};
+
+UserSchema.methods.createResetPasswordToken = function () {
+  const resetToken = crypto.randomBytes(32).toString();
+
+  // create token
+  this.resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
+  this.resetTokenExpireAt = new Date(Date.now() + 10 * 60 * 1000); //10 minutes
+
+  return resetToken;
 };
 
 const User = model<IUser>("User", UserSchema);
