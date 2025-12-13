@@ -205,20 +205,35 @@ export const forgotPassword = asyncErrorHandler(
     if (!user) {
       return next(new AppError(400, "Sorry no user found with this email."));
     }
-
-    // Sending email
     const resetToken = user.createResetPasswordToken();
+    await user.save({ validateBeforeSave: false });
 
-    const frontUser = `${configEnv.CLIENT_URL}`;
+    try {
+      const html: string = `
+        <h2>Reset your password</h2>
+        <p>You can reset your password by using this link</p>
+        <p>Token <a>${req.protocol}://${req.host}${req.originalUrl}/${resetToken}</a></p>
+      `;
 
-    const message = `
-    Your request to reset password.
-    Click here to reset your password
-    `;
-    res.status(200).json({
-      success: true,
-      message: `The email was sent to ${email}`
-    });
+      await sendEmail("testingmail@email.com", "Reset password", html);
+
+      return res.status(200).json({
+        success: true,
+        message: "Email sent to your address. Check to proceed"
+      });
+    } catch (error) {
+      // Sending email
+      console.log("Error while sending mail");
+
+      user.resetPasswordToken = undefined;
+      user.resetTokenExpireAt = undefined;
+      await user.save();
+      res.status(400).json({
+        success: false,
+        message: "Error while sending email",
+        error
+      });
+    }
   }
 );
 
@@ -232,3 +247,8 @@ export const resetPassword = (
     message: "Password has been reset"
   });
 };
+
+// emailAddress: string,
+//   subject: string,
+//   text: string,
+//   html: string
