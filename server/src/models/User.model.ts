@@ -1,7 +1,7 @@
 import { Schema, Document, model } from "mongoose";
 import validator from "validator";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
+import * as crypto from "crypto";
 
 type UserRoles =
   | "admin"
@@ -22,9 +22,9 @@ interface IUser extends Document {
   passwordUpdatedAt: Date;
   comparePassword(password: string): Promise<boolean>;
   passwordHasBeenUpdated(JWTIat: number): boolean;
-  resetPasswordToken: string;
+  resetPasswordToken: string | undefined;
   createResetPasswordToken(): string;
-  resetTokenExpireAt: Date;
+  resetTokenExpireAt: Date | undefined;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,8 +94,7 @@ UserSchema.methods.passwordHasBeenUpdated = function (
 };
 
 UserSchema.methods.createResetPasswordToken = function () {
-  const resetToken = crypto.randomBytes(32).toString();
-
+  const resetToken = crypto.randomBytes(32).toString("hex");
   // create token
   this.resetPasswordToken = crypto
     .createHash("sha256")
@@ -103,7 +102,6 @@ UserSchema.methods.createResetPasswordToken = function () {
     .digest("hex");
 
   this.resetTokenExpireAt = new Date(Date.now() + 10 * 60 * 1000); //10 minutes
-
   return resetToken;
 };
 
