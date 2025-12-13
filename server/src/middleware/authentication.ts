@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import User from "@/models/User.model";
 import asyncErrorHandler from "@/utils/catchAsyncError";
@@ -223,8 +224,6 @@ export const forgotPassword = asyncErrorHandler(
       });
     } catch (error) {
       // Sending email
-      console.log("Error while sending mail");
-
       user.resetPasswordToken = undefined;
       user.resetTokenExpireAt = undefined;
       await user.save();
@@ -237,18 +236,40 @@ export const forgotPassword = asyncErrorHandler(
   }
 );
 
-export const resetPassword = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  res.status(200).json({
-    success: true,
-    message: "Password has been reset"
-  });
-};
+export const resetPassword = asyncErrorHandler(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { token } = req.params;
+    const { password, confirmPassword } = req.body;
 
-// emailAddress: string,
-//   subject: string,
-//   text: string,
-//   html: string
+    if (!token || typeof token !== "string") {
+      return next(new AppError(400, "Please provide token"));
+    }
+
+    const resetToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      resetPasswordToken: resetToken,
+      resetTokenExpireAt: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return next(new AppError(404, "No user find or token expired"));
+    }
+
+    if (password !== confirmPassword) {
+      return next(
+        new AppError(400, "Password and confirm password should match")
+      );
+    }
+    user.password = password;
+    user.resetPasswordToken = undefined;
+    user.resetTokenExpireAt = undefined;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password has been reset",
+      user
+    });
+  }
+);
